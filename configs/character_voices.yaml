@@ -1,0 +1,40 @@
+characters:
+  protagonist_male:
+    description: "Young male hero, determined voice"
+    gender: male
+    age_range: teen
+    tone: energetic
+    pitch_shift: 0
+    reference_audio: data/voice_references/male_teen_hero.wav
+
+  protagonist_female:
+    description: "Young female lead, warm and expressive"
+    gender: female
+    age_range: teen
+    tone: warm
+    pitch_shift: 0
+    reference_audio: data/voice_references/female_teen_warm.wav
+
+  antagonist:
+    description: "Villain, deep commanding voice"
+    gender: male
+    age_range: adult
+    tone: menacing
+    pitch_shift: -2
+    reference_audio: data/voice_references/male_adult_deep.wav
+
+  sensei:
+    description: "Teacher/mentor, calm wise voice"
+    gender: male
+    age_range: elder
+    tone: wise
+    pitch_shift: -1
+    reference_audio: data/voice_references/male_elder_calm.wav
+
+  comic_relief:
+    description: "Funny sidekick, exaggerated expressive"
+    gender: male
+    age_range: teen
+    tone: comedic
+    pitch_shift: 1
+    reference_audio: data/voice_references/male_teen_comic.wav

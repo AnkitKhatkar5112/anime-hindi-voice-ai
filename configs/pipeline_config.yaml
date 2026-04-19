@@ -1,0 +1,60 @@
+project:
+  name: anime-dub-ai
+  version: 0.1.0
+  target_language: hi
+
+preprocessing:
+  sample_rate: 22050
+  channels: 1
+  noise_reduction: true
+  normalize_volume: true
+  vad_threshold: 0.5
+
+asr:
+  model: faster-whisper
+  model_size: large-v3
+  language: ja
+  task: transcribe
+  beam_size: 5
+  word_timestamps: true
+
+translation:
+  service: google
+  source_lang: ja
+  target_lang: hi
+  preserve_timing: true
+  context_window: 3
+
+text_normalization:
+  language: hi
+  expand_numbers: true
+  expand_abbreviations: true
+  clean_special_chars: true
+
+tts:
+  engine: coqui
+  model: tts_models/hi/cv/vits
+  speaker_embedding: true
+  speed_control: true
+  emotion_control: true
+
+voice_cloning:
+  enabled: true
+  embedding_model: resemblyzer
+  character_map: configs/character_voices.yaml
+
+alignment:
+  method: dtw
+  stretch_limit: 1.5
+  preserve_pauses: true
+
+lip_sync:
+  enabled: false
+  model: wav2lip
+  face_det_batch_size: 16
+
+output:
+  format: wav
+  sample_rate: 22050
+  video_output: false
+  subtitle_output: true

@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Environment
+.env
+
+# Data (large files — use cloud storage or DVC)
+data/raw_audio/
+data/processed/
+data/tts_output/
+data/aligned/
+data/voice_references/embeddings/
+
+# Model weights (download separately)
+models/
+
+# Outputs
+outputs/
+
+# Logs
+logs/
+
+# Jobs (API)
+jobs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp

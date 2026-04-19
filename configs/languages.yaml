@@ -1,0 +1,69 @@
+# configs/languages.yaml
+# Add a new language here — no code changes needed elsewhere.
+
+languages:
+  hi:
+    name: Hindi
+    name_native: हिन्दी
+    script: Devanagari
+    iso_code: hi
+    tts_model: tts_models/hi/cv/vits
+    translation_code: hi
+    dialect_post_process: false
+    dialect_script: null
+    status: active
+
+  hry:
+    name: Haryanvi
+    name_native: हरयाणवी
+    script: Devanagari
+    iso_code: hry
+    tts_model: tts_models/hi/cv/vits   # Hindi model as base
+    translation_code: hi               # Translate to Hindi first
+    dialect_post_process: true
+    dialect_script: scripts/dialects/hindi_to_haryanvi.py
+    status: in_progress
+
+  pa:
+    name: Punjabi
+    name_native: ਪੰਜਾਬੀ
+    script: Gurmukhi
+    iso_code: pa
+    tts_model: tts_models/pa/cv/vits
+    translation_code: pa
+    dialect_post_process: false
+    dialect_script: null
+    status: planned
+
+  ta:
+    name: Tamil
+    name_native: தமிழ்
+    script: Tamil
+    iso_code: ta
+    tts_model: tts_models/ta/cv/vits
+    translation_code: ta
+    dialect_post_process: false
+    dialect_script: null
+    status: planned
+
+  te:
+    name: Telugu
+    name_native: తెలుగు
+    script: Telugu
+    iso_code: te
+    tts_model: tts_models/te/cv/vits
+    translation_code: te
+    dialect_post_process: false
+    dialect_script: null
+    status: planned
+
+  bn:
+    name: Bengali
+    name_native: বাংলা
+    script: Bengali
+    iso_code: bn
+    tts_model: tts_models/bn/cv/vits
+    translation_code: bn
+    dialect_post_process: false
+    dialect_script: null
+    status: planned
