@@ -5,10 +5,15 @@ Uses faster-whisper for speed + accuracy on GPU.
 from faster_whisper import WhisperModel
 import json
 from pathlib import Path
+import torch
 
 
-def transcribe(audio_path: str, output_json: str, model_size: str = "large-v3") -> list:
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+def transcribe(audio_path: str, output_json: str, model_size: str = "large-v3", device: str = None) -> list:
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if device == "cuda" else "int8"
+    print(f"[ASR] Using device: {device} | compute_type: {compute_type}")
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
     segments, info = model.transcribe(
         audio_path,
@@ -45,6 +50,7 @@ if __name__ == "__main__":
     parser.add_argument("--audio", required=True)
     parser.add_argument("--output", default="data/processed/transcript_ja.json")
     parser.add_argument("--model", default="large-v3")
+    parser.add_argument("--device", default=None, help="Force device: cuda or cpu")
     args = parser.parse_args()
 
-    transcribe(args.audio, args.output, args.model)
+    transcribe(args.audio, args.output, args.model, args.device)

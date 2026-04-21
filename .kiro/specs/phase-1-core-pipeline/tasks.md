@@ -5,7 +5,7 @@
     - Run `pip install -r requirements.txt`
     - If `torch` fails due to CUDA mismatch, install the correct build from https://pytorch.org/get-started/locally/
     - _Requirements: 1_
-  - [ ] 1.2 Configure `.env` with HuggingFace token
+  - [x] 1.2 Configure `.env` with HuggingFace token
     - Copy `.env.example` to `.env`
     - Generate HF token at https://huggingface.co/settings/tokens
     - Accept pyannote model license at https://huggingface.co/pyannote/speaker-diarization-3.1
@@ -14,8 +14,8 @@
 
 ---
 
-- [ ] 2. Audio extraction and preprocessing
-  - [ ] 2.1 Test `scripts/preprocessing/extract_audio.py` on a sample clip
+- [x] 2. Audio extraction and preprocessing
+  - [x] 2.1 Test `scripts/preprocessing/extract_audio.py` on a sample clip
     - Run: `python scripts/preprocessing/extract_audio.py --input sample.mp4 --output data/processed/audio.wav`
     - Verify: file exists, plays correctly, is 22050 Hz mono
     - Use `librosa.get_duration()` to confirm duration matches source
@@ -24,8 +24,8 @@
 
 ---
 
-- [ ] 3. Speaker diarization testing
-  - [ ] 3.1 Run `scripts/preprocessing/diarize_speakers.py` and verify speaker segments
+- [x] 3. Speaker diarization testing
+  - [x] 3.1 Run `scripts/preprocessing/diarize_speakers.py` and verify speaker segments
     - Run: `python scripts/preprocessing/diarize_speakers.py --audio data/processed/audio.wav --output data/processed/diarization.json`
     - Verify JSON contains entries like `{"start": 0.5, "end": 3.2, "speaker": "SPEAKER_00", "duration": 2.7}`
     - **Done when:** JSON has 2+ distinct `SPEAKER_*` labels with non-overlapping time ranges
@@ -33,13 +33,13 @@
 
 ---
 
-- [ ] 4. Japanese ASR transcription
-  - [ ] 4.1 Run `scripts/preprocessing/asr_transcribe.py` and verify Japanese transcript
+- [x] 4. Japanese ASR transcription
+  - [x] 4.1 Run `scripts/preprocessing/asr_transcribe.py` and verify Japanese transcript
     - Run: `python scripts/preprocessing/asr_transcribe.py --audio data/processed/audio.wav --model medium --output data/processed/transcript_ja.json`
     - Use `medium` model for speed testing, switch to `large-v3` for production
     - **Done when:** `transcript_ja.json` contains Japanese text with `start`, `end`, and `words` per segment
     - _Requirements: 5_
-  - [ ] 4.2 Fix GPU/CPU auto-detection in `scripts/preprocessing/asr_transcribe.py`
+  - [x] 4.2 Fix GPU/CPU auto-detection in `scripts/preprocessing/asr_transcribe.py`
     - Replace hardcoded `device="cuda"` with `torch.cuda.is_available()` check
     - Use `compute_type="float16"` for CUDA, `"int8"` for CPU
     - Add a `--device` CLI argument for manual override

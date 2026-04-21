@@ -6,6 +6,9 @@ Requires HuggingFace token with pyannote/speaker-diarization-3.1 access.
 from pyannote.audio import Pipeline
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def diarize(audio_path: str, output_json: str, hf_token: str) -> dict:
