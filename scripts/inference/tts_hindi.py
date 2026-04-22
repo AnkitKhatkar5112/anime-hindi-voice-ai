@@ -1,24 +1,106 @@
 """
 Stage 4: Hindi TTS — Convert translated Hindi text to speech.
-Supports Coqui TTS (VITS model) with optional speaker embedding for voice cloning.
+Supports Coqui TTS (VITS model) with fallback to gTTS (Google TTS).
+High-emotion segments (emotion_intensity > 0.7) are synthesized with Bark TTS.
 """
-from TTS.api import TTS
-import soundfile as sf
 import json
 import os
+import torch
+import numpy as np
+import librosa as _lb
+import soundfile as sf
 from pathlib import Path
+
+BARK_VOICE_MAP = {
+    "angry":     "v2/hi_speaker_3",
+    "happy":     "v2/hi_speaker_1",
+    "sad":       "v2/hi_speaker_5",
+    "surprised": "v2/hi_speaker_2",
+    "fearful":   "v2/hi_speaker_4",
+    "neutral":   "v2/hi_speaker_0",
+}
+
+
+def _try_load_coqui(device: str):
+    """Attempt to load the Coqui Hindi VITS model. Returns None if unavailable."""
+    try:
+        from TTS.api import TTS
+        tts = TTS("tts_models/hi/cv/vits").to(device)
+        return tts
+    except (KeyError, Exception) as e:
+        print(f"[TTS] Coqui Hindi model unavailable ({e}), falling back to gTTS")
+        return None
+
+
+def _bark_synthesize(text: str, emotion: str, out_file: str, segment_index: int = 0, intensity: float = 0.0):
+    """Synthesize using Bark TTS with an emotion-matched Hindi voice preset."""
+    from bark import generate_audio, SAMPLE_RATE
+    prompt = BARK_VOICE_MAP.get(emotion, BARK_VOICE_MAP["neutral"])
+    print(f"[TTS] Segment {segment_index}: using Bark (emotion={emotion}, intensity={intensity:.2f})")
+    audio_array = generate_audio(text, history_prompt=prompt)
+    sf.write(out_file, audio_array, SAMPLE_RATE)
+
+
+def _gtts_synthesize(text: str, out_file: str):
+    """Synthesize using Google TTS and save as WAV at 22050 Hz."""
+    from gtts import gTTS
+    mp3_tmp = out_file.replace(".wav", "_tmp.mp3")
+    gTTS(text, lang='hi').save(mp3_tmp)
+    audio_data, _ = _lb.load(mp3_tmp, sr=22050, mono=True)
+    sf.write(out_file, audio_data, 22050)
+    os.remove(mp3_tmp)
+
+
+def _find_speaker(seg_start: float, seg_end: float, diarization: list) -> str | None:
+    """Return the speaker label whose diarization window best covers the segment midpoint."""
+    midpoint = (seg_start + seg_end) / 2.0
+    best_speaker = None
+    best_overlap = -1.0
+    for entry in diarization:
+        d_start = entry['start']
+        d_end = entry['end']
+        # Use overlap length; fall back to proximity to midpoint
+        overlap = max(0.0, min(seg_end, d_end) - max(seg_start, d_start))
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_speaker = entry['speaker']
+        elif overlap == 0 and best_overlap == 0:
+            # No overlap found yet — pick closest by midpoint distance
+            dist = abs(midpoint - (d_start + d_end) / 2.0)
+            if best_speaker is None or dist < abs(midpoint - (diarization[0]['start'] + diarization[0]['end']) / 2.0):
+                best_speaker = entry['speaker']
+    return best_speaker
 
 
 def synthesize_hindi(segments_json: str, output_dir: str,
-                     engine: str = "coqui", speaker_embed: str = None) -> list:
+                     engine: str = "coqui", speaker_embed: str = None,
+                     device: str = None,
+                     diarization_json: str = None) -> list:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     with open(segments_json, 'r', encoding='utf-8') as f:
         segments = json.load(f)
 
+    # Load diarization data if provided
+    diarization = None
+    if diarization_json is not None:
+        with open(diarization_json, 'r', encoding='utf-8') as f:
+            diarization = json.load(f)
+
+    tts = None
+    active_engine = engine
+
     if engine == "coqui":
-        tts = TTS("tts_models/hi/cv/vits").to("cuda")
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[TTS] Using device: {device}")
+        tts = _try_load_coqui(device)
+        if tts is None:
+            active_engine = "gtts"
+
+    if active_engine == "gtts":
+        print("[TTS] Using engine: gTTS (hi)")
 
     audio_segments = []
 
@@ -29,17 +111,56 @@ def synthesize_hindi(segments_json: str, output_dir: str,
 
         out_file = str(output_path / f"seg_{i:04d}.wav")
 
-        if engine == "coqui":
+        # Resolve speaker from diarization
+        speaker_id = None
+        if diarization is not None:
+            speaker_id = _find_speaker(
+                seg.get('start', 0.0),
+                seg.get('end', 0.0),
+                diarization
+            )
+            # Check if a .npy embedding exists for this speaker
+            embed_path = Path(f"data/voice_references/embeddings/{speaker_id}.npy")
+            if speaker_id and embed_path.exists():
+                print(f"[TTS] Segment {i}: speaker={speaker_id} (embedding found, logged only)")
+            elif speaker_id:
+                print(f"[TTS] Segment {i}: speaker={speaker_id} (no embedding file)")
+
+        emotion = seg.get("emotion", "neutral")
+        intensity = seg.get("emotion_intensity", 0.0)
+        use_bark = intensity > 0.7
+
+        if use_bark:
+            _bark_synthesize(text, emotion, out_file, segment_index=i, intensity=intensity)
+            tts_engine = "bark"
+        elif active_engine == "coqui" and tts is not None:
             tts.tts_to_file(
                 text=text,
                 file_path=out_file,
                 speaker_wav=speaker_embed
             )
+            tts_engine = "coqui"
+        elif active_engine == "gtts":
+            _gtts_synthesize(text, out_file)
+            tts_engine = "gtts"
+        else:
+            _gtts_synthesize(text, out_file)
+            tts_engine = "gtts"
+
+        # Compute stretch ratio metadata
+        tts_audio, sr_ = _lb.load(out_file, sr=22050)
+        tts_dur = len(tts_audio) / sr_
+        orig_dur = seg['end'] - seg['start']
+        seg['tts_duration'] = round(tts_dur, 3)
+        seg['original_duration'] = round(orig_dur, 3)
+        seg['stretch_ratio'] = round(tts_dur / orig_dur, 3) if orig_dur > 0 else 1.0
 
         audio_segments.append({
             **seg,
             "audio_file": out_file,
-            "segment_index": i
+            "segment_index": i,
+            "speaker_id": speaker_id,
+            "tts_engine": tts_engine,
         })
 
         if i % 5 == 0:
@@ -60,6 +181,8 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", default="data/tts_output/")
     parser.add_argument("--engine", default="coqui")
     parser.add_argument("--speaker-wav", default=None, help="Reference wav for voice cloning")
+    parser.add_argument("--device", default=None, help="Device override: 'cuda' or 'cpu' (auto-detected if not set)")
+    parser.add_argument("--diarization-json", default=None, help="Path to diarization JSON for per-speaker voice embedding lookup")
     args = parser.parse_args()
 
-    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav)
+    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav, args.device, args.diarization_json)

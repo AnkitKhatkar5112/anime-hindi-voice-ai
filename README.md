@@ -1,3 +1,11 @@
+git pull
+
+
+git add .
+git commit -m "task 4"
+git push
+
+
 # 🎌 Anime Dub AI — Japanese → Hindi (+ Multi-Language)
 
 End-to-end AI pipeline that transforms Japanese-dubbed anime audio into natural, expressive Hindi voices — then expands to Haryanvi, Punjabi, Tamil, and more Indian languages.

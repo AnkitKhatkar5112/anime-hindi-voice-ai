@@ -1,18 +1,18 @@
 # Phase 4 — Multi-Language Expansion: Tasks
 
-- [ ] 1. Haryanvi dialect support
+- [-] 1. Haryanvi dialect support
   - [ ] 1.1 Test existing `scripts/dialects/hindi_to_haryanvi.py` converter
     - Run: `python scripts/dialects/hindi_to_haryanvi.py`
     - Verify: `मैं यहाँ हूँ` → `म्हैं यड़े सूं`, `बहुत अच्छा है` → `घणा बढ़िया सै`
     - **Done when:** All test sentences print correct Haryanvi substitutions
     - _Requirements: 2_
-  - [ ] 1.2 Wire dialect post-processing into `scripts/inference/run_pipeline.py`
+  - [~] 1.2 Wire dialect post-processing into `scripts/inference/run_pipeline.py`
     - Read `configs/languages.yaml` for `dialect_post_process` and `dialect_script` fields
     - Add Stage 4b after translation when `dialect_post_process: true`
     - Update dialect scripts to accept `--input` and `--output` argparse args (process full JSON)
     - **Done when:** `--lang hry` pipeline runs Stage 4b and output JSON has Haryanvi-dialect text
     - _Requirements: 1, 3_
-  - [ ] 1.3 Expand Haryanvi word map to 60+ entries in `scripts/dialects/hindi_to_haryanvi.py`
+  - [~] 1.3 Expand Haryanvi word map to 60+ entries in `scripts/dialects/hindi_to_haryanvi.py`
     - Add: common verbs (dekh, sun, aa, ja, kha), pronouns, question words, adjectives, greetings
     - Research: Haryanvi phrasebooks, dialect dictionaries, native speaker validation
     - Add `test_pairs` list with 10 sentence pairs (Hindi → expected Haryanvi) and assert all pass

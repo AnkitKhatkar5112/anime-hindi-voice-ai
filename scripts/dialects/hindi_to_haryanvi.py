@@ -66,3 +66,23 @@ if __name__ == "__main__":
     for s in test_sentences:
         print(f"  HI: {s}")
         print(f"  HRY: {hindi_to_haryanvi(s)}\n")
+
+    # Required verification sentences
+    print("Verification assertions:\n")
+    s1 = "मैं यहाँ हूँ"
+    expected1 = "म्हैं यड़े सूं"
+    result1 = hindi_to_haryanvi(s1)
+    print(f"  HI: {s1}")
+    print(f"  HRY: {result1}")
+    print(f"  Expected: {expected1}")
+    assert result1 == expected1, f"FAIL: got '{result1}', expected '{expected1}'"
+    print("  PASS\n")
+
+    s2 = "बहुत अच्छा है"
+    expected2 = "घणा बढ़िया सै"
+    result2 = hindi_to_haryanvi(s2)
+    print(f"  HI: {s2}")
+    print(f"  HRY: {result2}")
+    print(f"  Expected: {expected2}")
+    assert result2 == expected2, f"FAIL: got '{result2}', expected '{expected2}'"
+    print("  PASS\n")

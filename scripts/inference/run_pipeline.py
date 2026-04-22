@@ -36,6 +36,8 @@ def main():
     parser.add_argument("--skip-diarize", action="store_true", help="Skip speaker diarization")
     parser.add_argument("--start-stage", type=int, default=1, help="Resume from stage N")
     parser.add_argument("--model-size", default="large-v3", help="Whisper model size")
+    parser.add_argument("--video-output", action="store_true", help="Enable Stage 7: Lip Sync video output")
+    parser.add_argument("--face-video", default=None, help="Face video for lip sync (required with --video-output)")
     args = parser.parse_args()
 
     print(f"\n🎌  Anime Dub AI  |  {args.input}  →  [{args.lang.upper()}]")
@@ -83,6 +85,21 @@ def main():
             mix_args += ["--bgm", args.bgm]
         run_stage("Stage 6: Time Alignment + Final Mix",
                   "scripts/inference/align_and_mix.py", mix_args)
+
+    if args.video_output:
+        if not args.face_video:
+            print("\n⚠️  Warning: --video-output set but --face-video not provided. Skipping Stage 7.")
+        else:
+            video_out = f"outputs/final_{args.lang}_video.mp4"
+            run_stage("Stage 7: Lip Sync",
+                      "scripts/inference/lip_sync.py",
+                      ["--input", args.face_video,
+                       "--audio", f"outputs/final_{args.lang}_dub.wav",
+                       "--output", video_out])
+            print(f"\n🎉  Pipeline complete!")
+            print(f"    Audio  → outputs/final_{args.lang}_dub.wav")
+            print(f"    Video  → {video_out}\n")
+            return
 
     print(f"\n🎉  Pipeline complete!")
     print(f"    Output → outputs/final_{args.lang}_dub.wav\n")

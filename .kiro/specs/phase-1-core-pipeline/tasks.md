@@ -49,13 +49,13 @@
 
 ---
 
-- [ ] 5. Translation pipeline (Japanese → Hindi)
-  - [ ] 5.1 Run `scripts/preprocessing/translate.py` to translate Japanese transcript
+- [x] 5. Translation pipeline (Japanese → Hindi)
+  - [x] 5.1 Run `scripts/preprocessing/translate.py` to translate Japanese transcript
     - Run: `python scripts/preprocessing/translate.py --input data/processed/transcript_ja.json --output data/processed/transcript_hi.json`
     - **Done when:** Every segment has `text_original` (Japanese) and `text_translated` (Hindi) fields
     - Manually spot-check 5–10 lines
     - _Requirements: 6_
-  - [ ] 5.2 Add Hindi text cleaning post-processing to `scripts/preprocessing/translate.py`
+  - [x] 5.2 Add Hindi text cleaning post-processing to `scripts/preprocessing/translate.py`
     - Add `clean_hindi_text()` function with regex whitespace cleanup + anime term map
     - Call after translation, save result as `text_cleaned` alongside `text_translated`
     - **Done when:** Output JSON has both `text_translated` and `text_cleaned` fields per segment
@@ -63,14 +63,14 @@
 
 ---
 
-- [ ] 6. Hindi TTS synthesis
-  - [ ] 6.1 Run `scripts/inference/tts_hindi.py` for Hindi speech synthesis
+- [x] 6. Hindi TTS synthesis
+  - [x] 6.1 Run `scripts/inference/tts_hindi.py` for Hindi speech synthesis
     - Run: `python scripts/inference/tts_hindi.py --input data/processed/transcript_hi.json --output-dir data/tts_output/`
     - First run downloads Coqui Hindi VITS model (~150 MB)
     - If CPU-only: change `.to("cuda")` to `.to("cpu")` in `synthesize_hindi()`
     - **Done when:** Files `data/tts_output/seg_0000.wav` through `seg_NNNN.wav` exist and are intelligible Hindi
     - _Requirements: 7_
-  - [ ] 6.2 Add TTS stretch ratio logging to `scripts/inference/tts_hindi.py`
+  - [x] 6.2 Add TTS stretch ratio logging to `scripts/inference/tts_hindi.py`
     - Compute `tts_duration`, `original_duration`, and `stretch_ratio` per segment after synthesis
     - Save to `data/tts_output/segments.json`
     - **Done when:** `segments.json` has `stretch_ratio` per segment, most values between 0.7 and 1.5
@@ -78,13 +78,13 @@
 
 ---
 
-- [ ] 7. Final alignment, mixing, and end-to-end pipeline
-  - [ ] 7.1 Test `scripts/inference/align_and_mix.py` for final audio assembly
+- [x] 7. Final alignment, mixing, and end-to-end pipeline
+  - [x] 7.1 Test `scripts/inference/align_and_mix.py` for final audio assembly
     - Get source duration with `librosa.get_duration(path="data/processed/audio.wav")`
     - Run: `python scripts/inference/align_and_mix.py --segments data/tts_output/segments.json --output outputs/final_hi_dub.wav --duration <total_seconds>`
     - **Done when:** `outputs/final_hi_dub.wav` plays without silence gaps, clipping, or crashes; duration within 5% of source
     - _Requirements: 8_
-  - [ ] 7.2 Run full end-to-end pipeline with `run_pipeline.py`
+  - [x] 7.2 Run full end-to-end pipeline with `run_pipeline.py`
     - Run: `python scripts/inference/run_pipeline.py --input sample.mp4 --lang hi`
     - Test `--start-stage 3` resume from Stage 3
     - Test `--skip-diarize` for faster iteration
