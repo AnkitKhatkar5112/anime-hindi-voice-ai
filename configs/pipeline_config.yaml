@@ -37,6 +37,8 @@ tts:
   speaker_embedding: true
   speed_control: true
   emotion_control: true
+  finetuned_model_path: ""        # Set to path of fine-tuned .pth to use it
+  finetuned_config_path: ""       # Set to path of fine-tuned config.json
 
 voice_cloning:
   enabled: true

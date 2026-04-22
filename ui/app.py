@@ -5,10 +5,9 @@ Run with: streamlit run ui/app.py
 import streamlit as st
 import subprocess
 import sys
-import tempfile
-import shutil
-from pathlib import Path
 import time
+import tempfile
+from pathlib import Path
 
 st.set_page_config(
     page_title="🎌 Anime Dub AI",
@@ -46,6 +45,15 @@ bgm_file = st.file_uploader(
 
 st.divider()
 
+STAGE_ORDER = [
+    "Stage 1",
+    "Stage 2",
+    "Stage 3",
+    "Stage 4",
+    "Stage 5",
+    "Stage 6",
+]
+
 if uploaded_file and st.button("🚀 Start Dubbing", type="primary"):
     with tempfile.TemporaryDirectory() as tmpdir:
         input_path = str(Path(tmpdir) / uploaded_file.name)
@@ -58,52 +66,58 @@ if uploaded_file and st.button("🚀 Start Dubbing", type="primary"):
             with open(bgm_path, "wb") as f:
                 f.write(bgm_file.getvalue())
 
-        stages = [
-            "🎵 Extracting & cleaning audio...",
-            "👥 Detecting speakers...",
-            "🇯🇵 Transcribing Japanese (Whisper)...",
-            f"🔄 Translating to {selected_lang_name}...",
-            "🗣️ Synthesizing Hindi voices (TTS)...",
-            "🎚️ Aligning timing & mixing...",
-        ]
-
         progress = st.progress(0)
         status_text = st.empty()
-
-        for i, stage in enumerate(stages):
-            status_text.text(stage)
-            progress.progress((i + 1) / len(stages))
-            time.sleep(0.5)
+        status_text.text("Starting pipeline...")
 
         cmd = [sys.executable, "scripts/inference/run_pipeline.py",
                "--input", input_path, "--lang", lang_code, "--skip-diarize"]
         if bgm_path:
             cmd += ["--bgm", bgm_path]
 
-        with st.spinner("Processing pipeline..."):
-            result = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.Popen(cmd)
 
+        while proc.poll() is None:
+            stage_file = Path("logs/current_stage.txt")
+            if stage_file.exists():
+                stage_label = stage_file.read_text(encoding="utf-8").strip()
+                status_text.text(f"⏳ {stage_label}")
+                # Compute progress fraction from stage number
+                stage_num = 0
+                for i, s in enumerate(STAGE_ORDER, start=1):
+                    if stage_label.startswith(s):
+                        stage_num = i
+                        break
+                if stage_num > 0:
+                    progress.progress(stage_num / len(STAGE_ORDER))
+            time.sleep(1)
+
+        returncode = proc.returncode
         progress.progress(1.0)
+        status_text.empty()
 
-        if result.returncode == 0:
-            output_file = f"outputs/final_{lang_code}_dub.wav"
-            if Path(output_file).exists():
+        if returncode == 0:
+            output_file = Path(f"outputs/final_{lang_code}_dub.wav")
+            if output_file.exists():
                 st.success("✅ Dubbing complete!")
-                st.audio(output_file)
-
-                with open(output_file, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download Dubbed Audio",
-                        data=f,
-                        file_name=f"dubbed_{lang_code}.wav",
-                        mime="audio/wav"
-                    )
+                audio_bytes = output_file.read_bytes()
+                st.audio(audio_bytes, format="audio/wav")
+                st.download_button(
+                    label="⬇️ Download Dubbed Audio",
+                    data=audio_bytes,
+                    file_name=f"dubbed_{lang_code}.wav",
+                    mime="audio/wav"
+                )
             else:
                 st.error("Pipeline completed but output file not found.")
         else:
             st.error("❌ Pipeline failed.")
-            with st.expander("Error details"):
-                st.code(result.stderr[-1000:])
+
+        with st.expander("📋 Show logs"):
+            log_path = Path("logs/pipeline_stdout.txt")
+            if log_path.exists():
+                lines = log_path.read_text(encoding="utf-8").splitlines()
+                st.code("\n".join(lines[-20:]))
 
 st.divider()
 st.markdown("""

@@ -21,14 +21,24 @@ BARK_VOICE_MAP = {
 }
 
 
-def _try_load_coqui(device: str):
-    """Attempt to load the Coqui Hindi VITS model. Returns None if unavailable."""
+def _try_load_coqui(device: str, model_name: str = "tts_models/hi/cv/vits",
+                    finetuned_model_path: str = "", finetuned_config_path: str = ""):
+    """Attempt to load a Coqui TTS model. Returns None if unavailable.
+
+    If finetuned_model_path is set, loads the fine-tuned model from disk;
+    otherwise falls back to the named base model.
+    """
     try:
         from TTS.api import TTS
-        tts = TTS("tts_models/hi/cv/vits").to(device)
+        if finetuned_model_path:
+            print(f"[TTS] Loading fine-tuned model from: {finetuned_model_path}")
+            tts = TTS(model_path=finetuned_model_path, config_path=finetuned_config_path).to(device)
+        else:
+            tts = TTS(model_name).to(device)
         return tts
     except (KeyError, Exception) as e:
-        print(f"[TTS] Coqui Hindi model unavailable ({e}), falling back to gTTS")
+        label = finetuned_model_path if finetuned_model_path else model_name
+        print(f"[TTS] Coqui model '{label}' unavailable ({e}), falling back to gTTS")
         return None
 
 
@@ -81,7 +91,9 @@ def synthesize_hindi(segments_json: str, output_dir: str,
                      engine: str = "coqui", speaker_embed: str = None,
                      device: str = None,
                      diarization_json: str = None,
-                     lang: str = "hi") -> list:
+                     lang: str = "hi",
+                     finetuned_model_path: str = "",
+                     finetuned_config_path: str = "") -> list:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -97,7 +109,8 @@ def synthesize_hindi(segments_json: str, output_dir: str,
     tts = None
     active_engine = engine
 
-    # Check languages.yaml for tts_engine override (e.g. tts_engine: google)
+    # Read languages.yaml for tts_engine override and tts_model path
+    coqui_model = "tts_models/hi/cv/vits"  # default fallback
     try:
         import yaml
         with open("configs/languages.yaml", "r", encoding="utf-8") as _f:
@@ -105,6 +118,21 @@ def synthesize_hindi(segments_json: str, output_dir: str,
         _lang_entry = _lang_cfg.get("languages", {}).get(lang, {})
         if _lang_entry.get("tts_engine") == "google":
             active_engine = "gtts"
+        if _lang_entry.get("tts_model"):
+            coqui_model = _lang_entry["tts_model"]
+    except Exception:
+        pass
+
+    # Read pipeline_config.yaml for fine-tuned model paths (override CLI args if set)
+    try:
+        import yaml as _yaml
+        with open("configs/pipeline_config.yaml", "r", encoding="utf-8") as _pf:
+            _pipeline_cfg = _yaml.safe_load(_pf)
+        _tts_cfg = _pipeline_cfg.get("tts", {})
+        if not finetuned_model_path:
+            finetuned_model_path = _tts_cfg.get("finetuned_model_path", "") or ""
+        if not finetuned_config_path:
+            finetuned_config_path = _tts_cfg.get("finetuned_config_path", "") or ""
     except Exception:
         pass
 
@@ -112,7 +140,7 @@ def synthesize_hindi(segments_json: str, output_dir: str,
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"[TTS] Using device: {device}")
-        tts = _try_load_coqui(device)
+        tts = _try_load_coqui(device, coqui_model, finetuned_model_path, finetuned_config_path)
         if tts is None:
             active_engine = "gtts"
 
@@ -201,6 +229,9 @@ if __name__ == "__main__":
     parser.add_argument("--device", default=None, help="Device override: 'cuda' or 'cpu' (auto-detected if not set)")
     parser.add_argument("--diarization-json", default=None, help="Path to diarization JSON for per-speaker voice embedding lookup")
     parser.add_argument("--lang", default="hi", help="Language ISO code for gTTS fallback (e.g. hi, pa)")
+    parser.add_argument("--finetuned-model", default="", help="Path to fine-tuned .pth model file")
+    parser.add_argument("--finetuned-config", default="", help="Path to fine-tuned config.json")
     args = parser.parse_args()
 
-    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav, args.device, args.diarization_json, args.lang)
+    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav, args.device, args.diarization_json, args.lang,
+                     finetuned_model_path=args.finetuned_model, finetuned_config_path=args.finetuned_config)

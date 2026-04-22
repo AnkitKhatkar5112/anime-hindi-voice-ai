@@ -1,12 +1,12 @@
 # Phase 7 — Testing & CI: Tasks
 
-- [ ] 1. Test infrastructure and fixture setup
-  - [ ] 1.1 Create `tests/conftest.py` with shared session-scoped fixtures
+- [x] 1. Test infrastructure and fixture setup
+  - [x] 1.1 Create `tests/conftest.py` with shared session-scoped fixtures
     - Define `SAMPLE_CLIP = "tests/fixtures/sample_30s.mp4"` and `PROCESSED_DIR`
     - Add `run_stage1()` session fixture: extracts audio once for entire test session
     - Create `tests/fixtures/` directory
     - _Requirements: 2_
-  - [ ] 1.2 Add `tests/fixtures/sample_30s.mp4` test clip
+  - [x] 1.2 Add `tests/fixtures/sample_30s.mp4` test clip
     - 30-second anime clip, committed to repo, ≤5 MB
     - **Done when:** `pytest tests/conftest.py` runs without error
     - _Requirements: 2_

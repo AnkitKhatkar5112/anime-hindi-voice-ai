@@ -10,11 +10,22 @@ from pathlib import Path
 
 
 def run_stage(label: str, script: str, extra_args: list = []):
+    import os
+    os.makedirs("logs", exist_ok=True)
+    with open("logs/current_stage.txt", "w", encoding="utf-8") as f:
+        f.write(label)
+
     cmd = [sys.executable, script] + extra_args
     print(f"\n{'='*55}")
     print(f"  ▶  {label}")
     print(f"{'='*55}")
-    result = subprocess.run(cmd)
+
+    log_path = "logs/pipeline_stdout.txt"
+    with open(log_path, "a", encoding="utf-8") as log_file:
+        log_file.write(f"\n{'='*55}\n  ▶  {label}\n{'='*55}\n")
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        log_file.write(result.stdout or "")
+
     if result.returncode != 0:
         print(f"\n❌ FAILED: {label}")
         sys.exit(1)
@@ -44,6 +55,10 @@ def main():
 
     for d in ["data/processed", "data/tts_output", "outputs", "logs"]:
         Path(d).mkdir(parents=True, exist_ok=True)
+
+    # Clear stage tracking files
+    Path("logs/current_stage.txt").write_text("Starting...", encoding="utf-8")
+    Path("logs/pipeline_stdout.txt").write_text("", encoding="utf-8")
 
     if args.start_stage <= 1:
         run_stage("Stage 1: Audio Extraction + Preprocessing",
