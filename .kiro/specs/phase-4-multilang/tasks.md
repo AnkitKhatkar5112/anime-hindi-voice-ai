@@ -1,18 +1,18 @@
 # Phase 4 — Multi-Language Expansion: Tasks
 
-- [-] 1. Haryanvi dialect support
-  - [ ] 1.1 Test existing `scripts/dialects/hindi_to_haryanvi.py` converter
+- [x] 1. Haryanvi dialect support
+  - [x] 1.1 Test existing `scripts/dialects/hindi_to_haryanvi.py` converter
     - Run: `python scripts/dialects/hindi_to_haryanvi.py`
     - Verify: `मैं यहाँ हूँ` → `म्हैं यड़े सूं`, `बहुत अच्छा है` → `घणा बढ़िया सै`
     - **Done when:** All test sentences print correct Haryanvi substitutions
     - _Requirements: 2_
-  - [~] 1.2 Wire dialect post-processing into `scripts/inference/run_pipeline.py`
+  - [x] 1.2 Wire dialect post-processing into `scripts/inference/run_pipeline.py`
     - Read `configs/languages.yaml` for `dialect_post_process` and `dialect_script` fields
     - Add Stage 4b after translation when `dialect_post_process: true`
     - Update dialect scripts to accept `--input` and `--output` argparse args (process full JSON)
     - **Done when:** `--lang hry` pipeline runs Stage 4b and output JSON has Haryanvi-dialect text
     - _Requirements: 1, 3_
-  - [~] 1.3 Expand Haryanvi word map to 60+ entries in `scripts/dialects/hindi_to_haryanvi.py`
+  - [x] 1.3 Expand Haryanvi word map to 60+ entries in `scripts/dialects/hindi_to_haryanvi.py`
     - Add: common verbs (dekh, sun, aa, ja, kha), pronouns, question words, adjectives, greetings
     - Research: Haryanvi phrasebooks, dialect dictionaries, native speaker validation
     - Add `test_pairs` list with 10 sentence pairs (Hindi → expected Haryanvi) and assert all pass
@@ -21,13 +21,13 @@
 
 ---
 
-- [ ] 2. Punjabi language pipeline
-  - [ ] 2.1 Check Coqui TTS for Punjabi model availability
+- [x] 2. Punjabi language pipeline
+  - [x] 2.1 Check Coqui TTS for Punjabi model availability
     - Run: `python -c "from TTS.api import TTS; [print(m) for m in TTS().list_models() if 'pa' in m]"`
     - **If model exists:** update `configs/languages.yaml` entry for `pa` with correct `tts_model` path
     - **If no model:** implement Google TTS API fallback (`pip install gTTS`) in `tts_hindi.py`
     - _Requirements: 4_
-  - [ ] 2.2 Run end-to-end Punjabi pipeline and validate output
+  - [x] 2.2 Run end-to-end Punjabi pipeline and validate output
     - Run: `python scripts/inference/run_pipeline.py --input sample.mp4 --lang pa`
     - Verify Gurmukhi script appears correctly in `data/processed/transcript_pa.json`
     - **Done when:** `outputs/final_pa_dub.wav` exists and is intelligible Punjabi audio

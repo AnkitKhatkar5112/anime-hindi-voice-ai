@@ -43,9 +43,14 @@ def _bark_synthesize(text: str, emotion: str, out_file: str, segment_index: int 
 
 def _gtts_synthesize(text: str, out_file: str):
     """Synthesize using Google TTS and save as WAV at 22050 Hz."""
+    _gtts_synthesize_lang(text, out_file, lang='hi')
+
+
+def _gtts_synthesize_lang(text: str, out_file: str, lang: str = 'hi'):
+    """Synthesize using Google TTS for the given language and save as WAV at 22050 Hz."""
     from gtts import gTTS
     mp3_tmp = out_file.replace(".wav", "_tmp.mp3")
-    gTTS(text, lang='hi').save(mp3_tmp)
+    gTTS(text, lang=lang).save(mp3_tmp)
     audio_data, _ = _lb.load(mp3_tmp, sr=22050, mono=True)
     sf.write(out_file, audio_data, 22050)
     os.remove(mp3_tmp)
@@ -75,7 +80,8 @@ def _find_speaker(seg_start: float, seg_end: float, diarization: list) -> str | 
 def synthesize_hindi(segments_json: str, output_dir: str,
                      engine: str = "coqui", speaker_embed: str = None,
                      device: str = None,
-                     diarization_json: str = None) -> list:
+                     diarization_json: str = None,
+                     lang: str = "hi") -> list:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -91,7 +97,18 @@ def synthesize_hindi(segments_json: str, output_dir: str,
     tts = None
     active_engine = engine
 
-    if engine == "coqui":
+    # Check languages.yaml for tts_engine override (e.g. tts_engine: google)
+    try:
+        import yaml
+        with open("configs/languages.yaml", "r", encoding="utf-8") as _f:
+            _lang_cfg = yaml.safe_load(_f)
+        _lang_entry = _lang_cfg.get("languages", {}).get(lang, {})
+        if _lang_entry.get("tts_engine") == "google":
+            active_engine = "gtts"
+    except Exception:
+        pass
+
+    if active_engine != "gtts" and engine == "coqui":
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"[TTS] Using device: {device}")
@@ -100,7 +117,7 @@ def synthesize_hindi(segments_json: str, output_dir: str,
             active_engine = "gtts"
 
     if active_engine == "gtts":
-        print("[TTS] Using engine: gTTS (hi)")
+        print(f"[TTS] Using engine: gTTS ({lang})")
 
     audio_segments = []
 
@@ -141,10 +158,10 @@ def synthesize_hindi(segments_json: str, output_dir: str,
             )
             tts_engine = "coqui"
         elif active_engine == "gtts":
-            _gtts_synthesize(text, out_file)
+            _gtts_synthesize_lang(text, out_file, lang=lang)
             tts_engine = "gtts"
         else:
-            _gtts_synthesize(text, out_file)
+            _gtts_synthesize_lang(text, out_file, lang=lang)
             tts_engine = "gtts"
 
         # Compute stretch ratio metadata
@@ -183,6 +200,7 @@ if __name__ == "__main__":
     parser.add_argument("--speaker-wav", default=None, help="Reference wav for voice cloning")
     parser.add_argument("--device", default=None, help="Device override: 'cuda' or 'cpu' (auto-detected if not set)")
     parser.add_argument("--diarization-json", default=None, help="Path to diarization JSON for per-speaker voice embedding lookup")
+    parser.add_argument("--lang", default="hi", help="Language ISO code for gTTS fallback (e.g. hi, pa)")
     args = parser.parse_args()
 
-    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav, args.device, args.diarization_json)
+    synthesize_hindi(args.input, args.output_dir, args.engine, args.speaker_wav, args.device, args.diarization_json, args.lang)

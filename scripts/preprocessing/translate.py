@@ -76,43 +76,52 @@ def apply_hinglish_fixes(text: str) -> str:
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def translate_segments(input_json: str, output_json: str) -> list:
+def translate_segments(input_json: str, output_json: str, src_lang: str = "ja", tgt_lang: str = "hi") -> list:
     """
-    3-stage translation: Japanese → English → Hinglish → Hindi.
-    Saves all intermediate texts alongside the final Hindi output.
+    3-stage translation: Japanese → English → Hinglish → Hindi (for Hindi).
+    For other languages: Japanese → English → Target Language (2-stage).
+    Saves all intermediate texts alongside the final output.
     """
     with open(input_json, 'r', encoding='utf-8') as f:
         segments = json.load(f)
 
-    ja_en   = GoogleTranslator(source="ja",   target="en")
-    en_hi   = GoogleTranslator(source="en",   target="hi")   # en → hinglish proxy
-    hi_hi   = GoogleTranslator(source="auto", target="hi")   # hinglish → hi
+    # For Hindi, use 3-stage pipeline; for other languages, use 2-stage (ja→en→target)
+    use_hinglish_pivot = (tgt_lang == "hi")
+
+    ja_en   = GoogleTranslator(source=src_lang, target="en")
+    en_tgt  = GoogleTranslator(source="en", target=tgt_lang)
 
     translated = []
 
     for i, seg in enumerate(segments):
         src_text = seg.get('text', '')
         try:
-            # Stage 1: Japanese → English
+            # Stage 1: Source → English
             en_text = _translate(ja_en, src_text)
 
-            # Stage 2: English → Hinglish
-            # GoogleTranslator en→hi often returns Devanagari; we use a small
-            # trick: translate to "hi" but keep the romanised intermediate by
-            # also storing the English for the next hop.
-            hinglish_text = apply_hinglish_fixes(en_text)   # English IS our Hinglish pivot
-
-            # Stage 3: English (Hinglish pivot) → Hindi
-            hi_text = _translate(en_hi, hinglish_text)
-
-            entry = {
-                **seg,
-                "text_original":  src_text,
-                "text_en":        en_text,
-                "text_hinglish":  hinglish_text,
-                "text_translated": hi_text,
-                "text_cleaned":   clean_hindi_text(hi_text),
-            }
+            if use_hinglish_pivot:
+                # Stage 2: English → Hinglish (for Hindi only)
+                hinglish_text = apply_hinglish_fixes(en_text)
+                # Stage 3: Hinglish → Hindi
+                tgt_text = _translate(en_tgt, hinglish_text)
+                entry = {
+                    **seg,
+                    "text_original":  src_text,
+                    "text_en":        en_text,
+                    "text_hinglish":  hinglish_text,
+                    "text_translated": tgt_text,
+                    "text_cleaned":   clean_hindi_text(tgt_text),
+                }
+            else:
+                # Stage 2: English → Target Language (direct)
+                tgt_text = _translate(en_tgt, en_text)
+                entry = {
+                    **seg,
+                    "text_original":  src_text,
+                    "text_en":        en_text,
+                    "text_translated": tgt_text,
+                    "text_cleaned":   clean_hindi_text(tgt_text),  # basic cleanup
+                }
         except Exception as exc:
             print(f"[Translation] Error on segment {i}: {exc}")
             entry = {
@@ -152,4 +161,4 @@ if __name__ == "__main__":
     parser.add_argument("--tgt", default="hi", help="Target language ISO code (default: hi)")
     args = parser.parse_args()
 
-    translate_segments(args.input, args.output)
+    translate_segments(args.input, args.output, src_lang=args.src, tgt_lang=args.tgt)

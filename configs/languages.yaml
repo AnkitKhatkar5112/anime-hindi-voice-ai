@@ -29,11 +29,12 @@ languages:
     name_native: ਪੰਜਾਬੀ
     script: Gurmukhi
     iso_code: pa
-    tts_model: tts_models/pa/cv/vits
+    tts_model: null
+    tts_engine: google
     translation_code: pa
     dialect_post_process: false
     dialect_script: null
-    status: planned
+    status: active
 
   ta:
     name: Tamil

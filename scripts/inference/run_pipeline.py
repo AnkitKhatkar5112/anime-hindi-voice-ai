@@ -69,9 +69,23 @@ def main():
                    "--output", f"data/processed/transcript_{args.lang}.json",
                    "--src", "ja", "--tgt", args.lang])
 
+    # Stage 4b: Dialect post-processing (only when configured in languages.yaml)
+    if args.start_stage <= 4:
+        import yaml
+        with open("configs/languages.yaml", "r", encoding="utf-8") as f:
+            lang_cfg = yaml.safe_load(f)
+        lang_entry = lang_cfg.get("languages", {}).get(args.lang, {})
+        if lang_entry.get("dialect_post_process", False):
+            dialect_script = lang_entry["dialect_script"]
+            transcript_path = f"data/processed/transcript_{args.lang}.json"
+            run_stage(f"Stage 4b: Dialect Post-Processing ({args.lang})",
+                      dialect_script,
+                      ["--input", transcript_path, "--output", transcript_path])
+
     if args.start_stage <= 5:
         tts_args = ["--input", f"data/processed/transcript_{args.lang}.json",
-                    "--output-dir", "data/tts_output/"]
+                    "--output-dir", "data/tts_output/",
+                    "--lang", args.lang]
         if args.speaker_wav:
             tts_args += ["--speaker-wav", args.speaker_wav]
         run_stage("Stage 5: Hindi TTS Synthesis", "scripts/inference/tts_hindi.py", tts_args)
