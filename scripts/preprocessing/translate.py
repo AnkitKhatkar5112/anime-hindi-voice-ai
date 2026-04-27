@@ -142,7 +142,7 @@ def translate_segments(input_json: str, output_json: str, src_lang: str = "ja", 
     with open(output_json, 'w', encoding='utf-8') as f:
         json.dump(translated, f, indent=2, ensure_ascii=False)
 
-    print(f"[Translation] Complete. {len(translated)} segments saved → {output_json}")
+    print(f"[Translation] Complete. {len(translated)} segments saved -> {output_json}")
     return translated
 
 
