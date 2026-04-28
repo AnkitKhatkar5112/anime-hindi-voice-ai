@@ -31,6 +31,14 @@ This spec covers the upgrades and additions needed to transform the existing `an
 - **Log_Writer**: The component that writes timestamped stage entries to the pipeline log file and updates `logs/current_stage.txt` in real-time.
 - **Mixer**: The component responsible for combining TTS audio segments with the background stem into a final mixed audio file, applying LUFS normalization and gain control.
 - **Validator**: The component that runs post-mux output validation using FFprobe to verify the integrity of the output file.
+- **Subtitle_Classifier**: The component that classifies each SRT entry as `dialogue`, `sign`, or `mixed` based on text pattern rules.
+- **Subtitle_Splitter**: The component that splits `mixed` segments into separate `sign` and `dialogue` segments.
+- **Sign_Translator**: The component that translates sign-type segments to Hindi using literal translation, bypassing the Dubbing_Adapter.
+- **Subtitle_Writer**: The component that serializes translated segments into SRT or ASS subtitle files.
+- **OCR_Engine**: The component that extracts frames from video using FFmpeg and runs OCR (easyocr) to detect on-screen sign text when no sign entries are found in the input SRT.
+- **Pipeline_Cache**: The component that manages `data/cache/` subdirectories and provides SHA256-keyed cache lookup and storage for translations, embeddings, and TTS audio.
+- **PipelineResumeError**: Exception raised when a stage cannot resume because required input files are missing from disk.
+- **Checkpoint**: A JSON file written after each successful stage to `data/processed/{episode_id}_checkpoint.json`, recording completed stages and enabling auto-resume.
 
 ---
 
@@ -87,6 +95,10 @@ This spec covers the upgrades and additions needed to transform the existing `an
 7. THE Dubbing_Adapter SHALL compute the available duration for each segment as `segment.end - segment.start` and target a character count fitting a natural Hindi speech rate of 14 characters per second.
 8. WHEN TTS output for a segment exceeds the available segment duration, THE Dubbing_Adapter SHALL time-stretch the audio using `librosa.effects.time_stretch` at a stretch ratio of up to 1.4× before mixing.
 9. IF time-stretching alone is insufficient to fit the TTS output within the segment duration, THEN THE Dubbing_Adapter SHALL shorten the translated text and re-synthesize the segment, with a maximum of 1 retry attempt.
+10. THE Pipeline SHALL use `Helsinki-NLP/opus-mt-ja-hi` as the primary translation model. All other translation backends (DeepL, Google Translate) are FALLBACK only, used only if Helsinki-NLP fails.
+11. THE Dubbing_Adapter backend SHALL be selected in the following priority order: (1) GPT-4o if `OPENAI_API_KEY` environment variable is set, (2) local LLM via Ollama if available, (3) rule-based post-processing (honorific substitution + length trimming) as final fallback.
+12. THE selected translation backend SHALL be locked for the entire episode and logged at startup (e.g. `"Translation backend: Helsinki-NLP/opus-mt-ja-hi"`).
+13. THE selected Dubbing_Adapter backend SHALL be logged at startup (e.g. `"Dubbing adapter: GPT-4o"` or `"Dubbing adapter: rule-based"`).
 
 ---
 
@@ -102,9 +114,11 @@ This spec covers the upgrades and additions needed to transform the existing `an
 4. THE Character_Voice_Mapper SHALL support at least 4 distinct voice profiles simultaneously within a single episode.
 5. THE Character_Voice_Mapper SHALL persist the speaker-to-voice mapping for an episode in `data/voice_maps/{episode_id}_voice_map.json` so that the mapping survives pipeline restarts and is reused for the same episode.
 6. IF the number of detected speakers exceeds the number of available voice profiles, THEN THE Character_Voice_Mapper SHALL cycle through profiles and log a warning.
-7. WHEN pyannote diarization is available, THE Character_Voice_Mapper SHALL use pyannote speaker diarization as the primary method for assigning speaker IDs to segments.
-8. WHEN an `.srt` file is provided as input without embedded speaker names, THE Voice_Embedding_Clusterer SHALL extract Resemblyzer voice embeddings for each SRT-timed segment and group segments into speaker clusters based on embedding similarity, producing speaker IDs equivalent to those from diarization.
-9. WHERE batch processing is performed across multiple episodes of the same series, THE Character_Voice_Mapper SHALL accept an optional `--shared-voice-map` argument pointing to an existing voice map JSON, and SHALL reuse that mapping for consistent character voices across episodes.
+7. WHEN `--fast-mode` is set, THE Pipeline SHALL skip pyannote diarization entirely and use Voice_Embedding_Clusterer (Resemblyzer) as the ONLY speaker identification method, regardless of whether an SRT file is provided. This reduces Stage 3 from ~2–5 minutes to ~20–30 seconds on CPU.
+8. WHEN `--fast-mode` is NOT set, THE Pipeline SHALL use pyannote as the primary diarization method (existing behavior).
+9. THE Pipeline SHALL log which diarization mode is active at startup: `"Diarization mode: fast (Resemblyzer)"` or `"Diarization mode: standard (pyannote)"`.
+10. WHEN an `.srt` file is provided as input without embedded speaker names AND `--fast-mode` is NOT set, THE Voice_Embedding_Clusterer SHALL extract Resemblyzer voice embeddings for each SRT-timed segment and group segments into speaker clusters based on embedding similarity, producing speaker IDs equivalent to those from diarization.
+11. WHERE batch processing is performed across multiple episodes of the same series, THE Character_Voice_Mapper SHALL accept an optional `--shared-voice-map` argument pointing to an existing voice map JSON, and SHALL reuse that mapping for consistent character voices across episodes.
 
 ---
 
@@ -120,11 +134,13 @@ This spec covers the upgrades and additions needed to transform the existing `an
 4. WHEN a segment has `emotion` set to `"happy"` or `"excited"`, THE Emotion_Engine SHALL apply a speaking rate increase of 5–15% and a pitch shift of +1 semitone relative to the neutral baseline.
 5. WHEN a segment has `emotion` set to `"neutral"`, THE Emotion_Engine SHALL synthesize at the baseline speaking rate and pitch with no modification.
 6. THE Emotion_Engine SHALL read emotion labels from the segment JSON produced by `detect_emotion.py` and SHALL NOT require manual annotation.
-7. THE TTS_Engine SHALL auto-detect the available backend at startup in the following priority order: (1) NVIDIA NeMo FastPitch+HiFiGAN if CUDA is available and `nemo_toolkit` is installed, (2) Coqui VITS Hindi model on GPU or CPU, (3) gTTS as a lightweight CPU-only fallback. THE TTS_Engine SHALL log which backend was selected.
-8. WHEN selecting a TTS backend, THE TTS_Engine SHALL verify that Hindi language support is available for the candidate backend before confirming selection, and SHALL skip to the next priority level if Hindi is not supported.
-9. THE Emotion_Engine SHALL detect emotion using a two-stage strategy: first applying rule-based detection from text patterns (exclamation marks, question marks, and Hindi keywords such as "nahi!", "kyu!", "bachao"), then optionally applying AI-based tagging via `detect_emotion.py` (transformers-based) as a secondary enrichment step.
-10. THE Emotion_Engine SHALL assign each segment an `emotion` field from the set `{neutral, happy, angry, sad, excited, fearful}` and an `emotion_intensity` float in the range 0.0–1.0.
-11. WHEN AI-based emotion tagging fails or is unavailable, THE Emotion_Engine SHALL fall back to the rule-based result and SHALL always produce a valid `emotion` label for every segment.
+7. THE TTS_Engine SHALL select a backend ONCE at pipeline startup and lock it for the entire episode. The selected backend SHALL be written to `data/voice_maps/{episode_id}_voice_map.json` under a `tts_backend` key.
+8. IF a voice map already exists for the episode with a `tts_backend` key, THE Pipeline SHALL reuse that backend without re-detecting, ensuring voice consistency when resuming from a checkpoint.
+9. WHEN selecting a TTS backend (no existing voice map), THE TTS_Engine SHALL auto-detect in the following priority order: (1) NVIDIA NeMo FastPitch+HiFiGAN if CUDA is available and `nemo_toolkit` is installed, (2) Coqui VITS Hindi model on GPU or CPU, (3) gTTS as a lightweight CPU-only fallback. THE TTS_Engine SHALL log which backend was selected.
+10. WHEN selecting a TTS backend, THE TTS_Engine SHALL verify that Hindi language support is available for the candidate backend before confirming selection, and SHALL skip to the next priority level if Hindi is not supported.
+11. THE Emotion_Engine SHALL detect emotion using a two-stage strategy: first applying rule-based detection from text patterns (exclamation marks, question marks, and Hindi keywords such as "nahi!", "kyu!", "bachao"), then optionally applying AI-based tagging via `detect_emotion.py` (transformers-based) as a secondary enrichment step.
+12. THE Emotion_Engine SHALL assign each segment an `emotion` field from the set `{neutral, happy, angry, sad, excited, fearful}` and an `emotion_intensity` float in the range 0.0–1.0.
+13. WHEN AI-based emotion tagging fails or is unavailable, THE Emotion_Engine SHALL fall back to the rule-based result and SHALL always produce a valid `emotion` label for every segment.
 
 ---
 
@@ -213,8 +229,10 @@ This spec covers the upgrades and additions needed to transform the existing `an
 
 1. THE Pipeline SHALL detect overlapping dialogue segments, defined as two consecutive segments where one segment's start time is before the previous segment's end time.
 2. WHEN overlapping segments are detected and the overlap duration is less than 200ms, THE Pipeline SHALL trim the earlier segment's end time to the later segment's start time.
-3. WHEN overlapping segments are detected and the overlap duration is 200ms or more, THE Pipeline SHALL prioritize the segment with higher `emotion_intensity` and discard the lower-priority segment, logging the discarded segment's ID, text, and timecodes.
-4. THE Pipeline SHALL report the count of overlapping segments detected and resolved in the mixing report JSON.
+3. WHEN overlapping segments are detected and the overlap duration is 200ms or more, THE Pipeline SHALL reduce the volume of the lower-priority segment (lower `emotion_intensity`) to 40% of its original level during the overlap window, then blend both segments.
+4. THE Pipeline SHALL NOT discard any segment due to overlap — all speech SHALL be preserved.
+5. THE mixing report JSON SHALL record `"blended": true` for segments that were volume-reduced during overlap.
+6. THE Pipeline SHALL report the count of overlapping segments detected and resolved in the mixing report JSON.
 
 ---
 
@@ -245,3 +263,81 @@ This spec covers the upgrades and additions needed to transform the existing `an
 3. WHILE a pipeline stage is executing, THE Log_Writer SHALL overwrite `logs/current_stage.txt` with a single line containing the current stage name, enabling UI polling for real-time status.
 4. IF a pipeline stage raises an exception, THEN THE Log_Writer SHALL write the stage name, exception type, exception message, and full traceback to the log file before the Pipeline exits.
 5. WHEN each pipeline stage completes successfully, THE Pipeline SHALL write intermediate output files to disk so that partial results are inspectable without running the full pipeline.
+
+---
+
+### Requirement 15: Subtitle Processing Module
+
+**User Story:** As a viewer, I want on-screen text (signs, titles, dialogue) to be translated into Hindi and displayed as subtitles, so that I can understand all text content in the dubbed video.
+
+#### Acceptance Criteria
+
+**Classification:**
+1. THE Subtitle_Classifier SHALL classify each SRT entry into one of three types: `dialogue`, `sign`, or `mixed`, using the following pattern rules:
+   - `sign`: text is ALL CAPS, or enclosed in brackets `[...]` or parentheses `(...)`, or contains no verb/sentence structure (heuristic: fewer than 3 words with no common dialogue particles), or matches known sign patterns (location names, sound effects like "[BANG]", "[MUSIC]")
+   - `dialogue`: text contains a verb or sentence structure, is mixed case, and does not match sign patterns
+   - `mixed`: entry contains both sign-like and dialogue-like content (e.g. "[SIGN TEXT] Character speaks here")
+2. THE Subtitle_Classifier SHALL apply classification rules in order: sign patterns first, then mixed detection, then default to dialogue.
+3. THE Subtitle_Classifier SHALL add a `subtitle_type` field (`dialogue` | `sign` | `mixed`) to each Segment.
+
+**Mixed Handling:**
+4. WHEN a Segment has `subtitle_type == "mixed"`, THE Subtitle_Splitter SHALL split it into two Segments: one `sign` Segment and one `dialogue` Segment, preserving the original `start` and `end` times on both.
+5. THE Subtitle_Splitter SHALL use regex to separate bracketed/parenthesized content (sign) from the remaining text (dialogue) within a mixed entry.
+
+**Dialogue path:**
+6. Segments classified as `dialogue` SHALL be routed through the existing dubbing pipeline (translation → Dubbing_Adapter → TTS synthesis).
+
+**Sign path:**
+7. Segments classified as `sign` SHALL be translated to Hindi using literal translation (NOT routed through Dubbing_Adapter localization).
+8. Sign Segments SHALL NOT be synthesized to speech — they appear as subtitle text only.
+9. THE Sign_Translator SHALL use the same translation backend as the dialogue path (Helsinki-NLP or DeepL), but with a `literal=True` flag that bypasses the Dubbing_Adapter rewriting step.
+
+**Subtitle Output:**
+10. THE Pipeline SHALL generate a Hindi subtitle file at `outputs/{episode_id}.hi.srt` containing ALL translated segments (both dialogue and sign types) with their original timecodes.
+11. THE Hindi subtitle file SHALL use UTF-8 encoding and valid SRT format (sequential index, `HH:MM:SS,mmm --> HH:MM:SS,mmm` timecodes, text).
+12. Sign subtitles SHALL be visually distinguishable in the output — prefixed with `[` and `]` in the SRT text (e.g. `[दुकान का नाम]`).
+
+**ASS Format (Optional Styling):**
+13. WHEN `--subtitle-format ass` is specified, THE Pipeline SHALL generate an `.ass` subtitle file instead of `.srt`, with sign subtitles positioned at the top of the screen using ASS `\an8` alignment override, and dialogue subtitles at the bottom (default position).
+14. THE ASS output SHALL use a standard Hindi-compatible font (e.g. Noto Sans Devanagari) in the style definition.
+
+**OCR Fallback:**
+15. WHEN `--ocr-signs` is specified AND the input SRT contains no `sign`-classified entries, THE OCR_Engine SHALL extract frames from the video at 1 fps using FFmpeg, run OCR using `easyocr` with Japanese language model, and produce a list of detected text regions with bounding boxes and timestamps.
+16. THE OCR_Engine SHALL filter OCR results to exclude regions that overlap with known dialogue subtitle positions (bottom 20% of frame), retaining only sign regions (top 80% of frame).
+17. OCR-detected sign timestamps SHALL be aligned to the nearest existing SRT/ASR segment boundary within ±500ms. IF a matching boundary exists within ±500ms, THE OCR_Engine SHALL use that segment's start time as the sign's start time. IF no matching boundary exists, THE OCR_Engine SHALL use the raw OCR frame timestamp.
+18. THE OCR_Engine SHALL log the count of signs aligned to SRT boundaries vs. signs using raw timestamps (e.g. `"[OCR] 12 signs aligned to SRT boundary, 3 used raw timestamp"`).
+19. OCR-detected sign text SHALL be translated to Hindi (literal) and added to the subtitle output with the aligned or raw timestamp as `start` time (duration: 2 seconds default).
+20. THE OCR_Engine SHALL write detected sign regions to `data/processed/ocr_signs.json` for inspection.
+
+---
+
+### Requirement 16: Pipeline Caching System
+
+**User Story:** As a developer, I want the pipeline to cache expensive computation results (translations, embeddings, TTS audio) so that re-runs and partial re-processing are fast.
+
+#### Acceptance Criteria
+
+1. THE Pipeline SHALL maintain a `data/cache/` directory with subdirectories: `translations/`, `embeddings/`, `tts/`.
+2. THE cache key for translations SHALL be the SHA256 hash of (source_text + src_lang + tgt_lang + backend_name).
+3. THE cache key for embeddings SHALL be the SHA256 hash of (audio_file_path + str(file_mtime)).
+4. THE cache key for TTS SHALL be the SHA256 hash of (dubbed_text + voice_profile_id + emotion + str(emotion_intensity) + tts_backend).
+5. Each cache entry SHALL be stored as: a `.json` file for translations, a `.npy` file for embeddings, and a `.wav` file for TTS.
+6. BEFORE computing a translation, embedding, or TTS result, THE Pipeline SHALL check the cache; on a cache hit, THE Pipeline SHALL log `"[CACHE HIT] {stage} {key[:8]}"` and return the cached result without recomputing.
+7. THE cache SHALL NOT be invalidated automatically — the user must run `--clear-cache` to clear it.
+8. WHEN `--clear-cache` is provided, THE Pipeline SHALL delete all files in `data/cache/translations/`, `data/cache/embeddings/`, and `data/cache/tts/`, log the total count of deleted files, and exit.
+
+---
+
+### Requirement 17: Failure Recovery — Resume from Stage
+
+**User Story:** As a developer, I want the pipeline to checkpoint its progress after each stage so that I can resume from the last successful stage after a failure, without reprocessing completed work.
+
+#### Acceptance Criteria
+
+1. AFTER each pipeline stage completes successfully, THE Pipeline SHALL write a checkpoint file to `data/processed/{episode_id}_checkpoint.json` with the schema: `{"episode_id": str, "completed_stages": [int], "last_stage": int, "timestamp": str, "input_file": str}`.
+2. WHEN `--resume-from N` is provided, THE Pipeline SHALL skip stages 1 through N-1, load intermediate outputs from disk, and start execution from stage N.
+3. WHEN `--resume-from` is NOT provided but a checkpoint file exists for the episode, THE Pipeline SHALL automatically resume from the last completed stage + 1 (auto-resume).
+4. WHEN no checkpoint file exists and `--resume-from` is not provided, THE Pipeline SHALL run from stage 1 (normal behavior).
+5. BEFORE executing each stage, THE Pipeline SHALL validate that all required input files for that stage exist on disk; IF any required input is missing, THE Pipeline SHALL raise a `PipelineResumeError` with a descriptive message listing the missing files.
+6. WHEN `--force-restart` is provided, THE Pipeline SHALL ignore any existing checkpoint file and run from stage 1.
+7. THE `--resume-from` argument SHALL accept a stage number in the range 1–10.
