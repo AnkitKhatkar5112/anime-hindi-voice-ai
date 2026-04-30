@@ -2,7 +2,7 @@ git pull
 
 
 git add .
-git commit -m "task 4"
+git commit -m "new-implementation task 3"
 git push
 
 

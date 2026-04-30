@@ -52,10 +52,10 @@
 ## Task 4: Stage 1 — Ingest (SRT Parser + Audio Extraction)
 *Req 2*
 
-- [ ] 4.1 Create `scripts/preprocessing/srt_parser.py` with `SRTParser` class
-- [ ] 4.2 Implement `parse(path: str, offset_ms: int = 0) -> list[Segment]` — reads UTF-8 and UTF-8-BOM `.srt` files using `pysrt` or custom parser
-- [ ] 4.3 Apply `offset_ms` to all `start`/`end` times, clamping to minimum 0ms
-- [ ] 4.4 Return error (empty list + log) if zero valid entries parsed; pipeline falls back to Whisper ASR
+- [x] 4.1 Create `scripts/preprocessing/srt_parser.py` with `SRTParser` class
+- [x] 4.2 Implement `parse(path: str, offset_ms: int = 0) -> list[Segment]` — reads UTF-8 and UTF-8-BOM `.srt` files using `pysrt` or custom parser
+- [x] 4.3 Apply `offset_ms` to all `start`/`end` times, clamping to minimum 0ms
+- [x] 4.4 Return error (empty list + log) if zero valid entries parsed; pipeline falls back to Whisper ASR
 - [ ] 4.5 Implement `serialize(segments: list[Segment]) -> str` — produces valid SRT string with sequential index, `HH:MM:SS,mmm --> HH:MM:SS,mmm` timecodes, UTF-8
 - [ ] 4.6 Log applied offset and segment count adjusted
 - [ ] 4.7 Write property-based test: for any valid list of Segments, `parse(serialize(segments))` produces timecodes within 10ms of originals (PBT — SRT round-trip, Req 2.6, 9.3)

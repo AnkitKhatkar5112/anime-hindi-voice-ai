@@ -3,10 +3,13 @@ Master Pipeline Runner — orchestrates all stages end to end.
 Usage: python scripts/inference/run_pipeline.py --input episode.mp4 --lang hi
 """
 import argparse
+import logging
 import subprocess
 import sys
 import json
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def run_stage(label: str, script: str, extra_args: list = []):
@@ -49,8 +52,9 @@ def main():
     parser.add_argument("--model-size", default="large-v3", help="Whisper model size")
     parser.add_argument("--video-output", action="store_true", help="Enable Stage 7: Lip Sync video output")
     parser.add_argument("--face-video", default=None, help="Face video for lip sync (required with --video-output)")
+    parser.add_argument("--srt-file", default=None, help="Optional .srt subtitle file to use as transcript (skips Whisper ASR)")
+    parser.add_argument("--subtitle-offset", type=int, default=0, help="Alignment-correction offset in ms applied to SRT timestamps")
     args = parser.parse_args()
-
     print(f"\n🎌  Anime Dub AI  |  {args.input}  →  [{args.lang.upper()}]")
 
     for d in ["data/processed", "data/tts_output", "outputs", "logs"]:
@@ -71,11 +75,52 @@ def main():
                   ["--audio", "data/processed/audio.wav"])
 
     if args.start_stage <= 3:
-        run_stage("Stage 3: ASR — Japanese Transcription",
-                  "scripts/preprocessing/asr_transcribe.py",
-                  ["--audio", "data/processed/audio.wav",
-                   "--output", "data/processed/transcript_ja.json",
-                   "--model", args.model_size])
+        # Stage 3: ASR — use SRT file if provided, otherwise run Whisper ASR
+        use_whisper = True
+        if args.srt_file:
+            # Attempt to parse the provided SRT file
+            from scripts.preprocessing.srt_parser import SRTParser
+            srt_parser = SRTParser()
+            try:
+                srt_segments = srt_parser.parse(args.srt_file, offset_ms=args.subtitle_offset)
+            except FileNotFoundError:
+                logger.warning(
+                    f"[SRT] File not found: {args.srt_file} — falling back to Whisper ASR"
+                )
+                srt_segments = []
+
+            if srt_segments:
+                # Non-empty: skip Whisper ASR, write segments as transcript
+                import json as _json
+                transcript_path = "data/processed/transcript_ja.json"
+                transcript_data = [
+                    {
+                        "segment_id": seg.segment_id,
+                        "start": seg.start,
+                        "end": seg.end,
+                        "speaker_id": seg.speaker_id,
+                        "source_text": seg.source_text,
+                    }
+                    for seg in srt_segments
+                ]
+                Path("data/processed").mkdir(parents=True, exist_ok=True)
+                with open(transcript_path, "w", encoding="utf-8") as f:
+                    _json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+                print(f"  ✅ SRT parsed: {len(srt_segments)} segments written to {transcript_path}")
+                use_whisper = False
+            else:
+                # Zero valid entries — SRTParser already logged the error; fall back to Whisper
+                logger.warning(
+                    f"[SRT] SRT parsing returned zero segments from {args.srt_file} — "
+                    "falling back to Whisper ASR"
+                )
+
+        if use_whisper:
+            run_stage("Stage 3: ASR — Japanese Transcription",
+                      "scripts/preprocessing/asr_transcribe.py",
+                      ["--audio", "data/processed/audio.wav",
+                       "--output", "data/processed/transcript_ja.json",
+                       "--model", args.model_size])
 
     if args.start_stage <= 4:
         run_stage(f"Stage 4: Translation (ja → {args.lang})",
