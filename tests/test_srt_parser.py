@@ -283,3 +283,91 @@ class TestSRTParserZeroEntries:
             assert isinstance(result, list)
         finally:
             os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# Property-Based Test: SRT round-trip timecodes within 10ms
+# Feature: production-dub-pipeline, Property 1: SRT round-trip timecodes within 10ms
+# Validates: Requirements 2.6, 9.3
+# ---------------------------------------------------------------------------
+
+from hypothesis import given, settings, assume
+from hypothesis import strategies as st
+
+from scripts.inference.models import Segment
+
+
+def _segment_strategy():
+    """Strategy that generates a single valid Segment with sensible field values."""
+    start = st.floats(min_value=0.0, max_value=7199.9, allow_nan=False, allow_infinity=False)
+
+    @st.composite
+    def _make_segment(draw):
+        seg_start = draw(start)
+        # end must be > start, at least 0.1s duration
+        seg_end = draw(
+            st.floats(
+                min_value=seg_start + 0.1,
+                max_value=min(seg_start + 3600.0, 7200.0),
+                allow_nan=False,
+                allow_infinity=False,
+            )
+        )
+        assume(seg_end > seg_start)
+        seg_id = draw(st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd")), min_size=1, max_size=10))
+        speaker = draw(st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd")), min_size=0, max_size=10))
+        text = draw(st.text(min_size=1, max_size=200).filter(lambda t: t.strip() != ""))
+        return Segment(
+            segment_id=seg_id,
+            start=seg_start,
+            end=seg_end,
+            speaker_id=speaker,
+            source_text=text,
+        )
+
+    return _make_segment()
+
+
+@given(segments=st.lists(_segment_strategy(), min_size=0, max_size=20))
+@settings(max_examples=100)
+def test_srt_round_trip_timecodes_within_10ms(segments):
+    """
+    Property 1: For any valid list of Segments, parse(serialize(segments))
+    produces timecodes within 10ms of the originals.
+
+    # Feature: production-dub-pipeline, Property 1: SRT round-trip timecodes within 10ms
+    **Validates: Requirements 2.6, 9.3**
+    """
+    # Trivially pass for empty lists
+    if not segments:
+        return
+
+    parser = SRTParser()
+    srt_string = parser.serialize(segments)
+
+    # parse() requires a file path, so write to a temp file
+    fd, tmp_path = tempfile.mkstemp(suffix=".srt")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(srt_string)
+
+        parsed = parser.parse(tmp_path, offset_ms=0)
+    finally:
+        os.unlink(tmp_path)
+
+    assert len(parsed) == len(segments), (
+        f"Round-trip changed segment count: {len(segments)} → {len(parsed)}"
+    )
+
+    tolerance = 0.010  # 10 ms
+    for i, (original, recovered) in enumerate(zip(segments, parsed)):
+        assert abs(recovered.start - original.start) <= tolerance, (
+            f"Segment {i}: start drifted by "
+            f"{abs(recovered.start - original.start) * 1000:.3f}ms "
+            f"(original={original.start}, recovered={recovered.start})"
+        )
+        assert abs(recovered.end - original.end) <= tolerance, (
+            f"Segment {i}: end drifted by "
+            f"{abs(recovered.end - original.end) * 1000:.3f}ms "
+            f"(original={original.end}, recovered={recovered.end})"
+        )

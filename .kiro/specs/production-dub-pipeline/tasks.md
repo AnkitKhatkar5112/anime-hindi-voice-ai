@@ -56,35 +56,35 @@
 - [x] 4.2 Implement `parse(path: str, offset_ms: int = 0) -> list[Segment]` — reads UTF-8 and UTF-8-BOM `.srt` files using `pysrt` or custom parser
 - [x] 4.3 Apply `offset_ms` to all `start`/`end` times, clamping to minimum 0ms
 - [x] 4.4 Return error (empty list + log) if zero valid entries parsed; pipeline falls back to Whisper ASR
-- [ ] 4.5 Implement `serialize(segments: list[Segment]) -> str` — produces valid SRT string with sequential index, `HH:MM:SS,mmm --> HH:MM:SS,mmm` timecodes, UTF-8
-- [ ] 4.6 Log applied offset and segment count adjusted
-- [ ] 4.7 Write property-based test: for any valid list of Segments, `parse(serialize(segments))` produces timecodes within 10ms of originals (PBT — SRT round-trip, Req 2.6, 9.3)
+- [x] 4.5 Implement `serialize(segments: list[Segment]) -> str` — produces valid SRT string with sequential index, `HH:MM:SS,mmm --> HH:MM:SS,mmm` timecodes, UTF-8
+- [x] 4.6 Log applied offset and segment count adjusted
+- [x] 4.7 Write property-based test: for any valid list of Segments, `parse(serialize(segments))` produces timecodes within 10ms of originals (PBT — SRT round-trip, Req 2.6, 9.3)
 
 ---
 
 ## Task 5: Stage 2 — Audio Source Separation
 *Req 6*
 
-- [ ] 5.1 Create `scripts/preprocessing/separate_audio.py` with `SourceSeparator` class
-- [ ] 5.2 Implement `separate(input_wav: str) -> tuple[str, str]` — runs Demucs `htdemucs` model, returns `(vocals_path, background_path)`
-- [ ] 5.3 Implement SNR check: compute `snr_db = 10 * log10(signal_power / noise_power)` on vocals stem
-- [ ] 5.4 Implement ducking fallback: if `snr_db < 10.0`, set `fallback_triggered=True`; use full extracted audio as background with volume 0.40 during dialogue, 1.00 outside
-- [ ] 5.5 Write `data/processed/separation_quality.json` with `{snr_db, fallback_triggered, model}`
-- [ ] 5.6 Log warning when fallback is triggered
-- [ ] 5.7 Write unit test: if Demucs not installed, `SourceSeparator` logs warning and returns `(extracted.wav, extracted.wav)` without raising
+- [x] 5.1 Create `scripts/preprocessing/separate_audio.py` with `SourceSeparator` class
+- [x] 5.2 Implement `separate(input_wav: str) -> tuple[str, str]` — runs Demucs `htdemucs` model, returns `(vocals_path, background_path)`
+- [x] 5.3 Implement SNR check: compute `snr_db = 10 * log10(signal_power / noise_power)` on vocals stem
+- [x] 5.4 Implement ducking fallback: if `snr_db < 10.0`, set `fallback_triggered=True`; use full extracted audio as background with volume 0.40 during dialogue, 1.00 outside
+- [x] 5.5 Write `data/processed/separation_quality.json` with `{snr_db, fallback_triggered, model}`
+- [x] 5.6 Log warning when fallback is triggered
+- [x] 5.7 Write unit test: if Demucs not installed, `SourceSeparator` logs warning and returns `(extracted.wav, extracted.wav)` without raising
 
 ---
 
 ## Task 6: Stage 3 — Speaker Diarization with Fast-Mode
 *Req 4.7–4.9*
 
-- [ ] 6.1 Extend `scripts/preprocessing/diarize_speakers.py` to accept `--fast-mode` flag
-- [ ] 6.2 WHEN `--fast-mode` is set: skip pyannote entirely; call `Voice_Embedding_Clusterer` (Resemblyzer) as the only method
-- [ ] 6.3 WHEN `--fast-mode` is NOT set: use pyannote as primary (existing behavior)
-- [ ] 6.4 Implement `Voice_Embedding_Clusterer.cluster(segments, vocals_wav) -> list[Segment]` — extracts Resemblyzer embeddings per segment, runs agglomerative clustering (cosine distance threshold 0.25), assigns `SPEAKER_XX` IDs
-- [ ] 6.5 Integrate embedding cache: call `PipelineCache.get_embedding(audio_path, mtime)` before computing; call `set_embedding` after
-- [ ] 6.6 Log active diarization mode at startup: `"Diarization mode: fast (Resemblyzer)"` or `"Diarization mode: standard (pyannote)"`
-- [ ] 6.7 Write unit test: `--fast-mode` with a 3-speaker audio fixture produces 3 distinct `SPEAKER_XX` IDs
+- [x] 6.1 Extend `scripts/preprocessing/diarize_speakers.py` to accept `--fast-mode` flag
+- [x] 6.2 WHEN `--fast-mode` is set: skip pyannote entirely; call `Voice_Embedding_Clusterer` (Resemblyzer) as the only method
+- [x] 6.3 WHEN `--fast-mode` is NOT set: use pyannote as primary (existing behavior)
+- [x] 6.4 Implement `Voice_Embedding_Clusterer.cluster(segments, vocals_wav) -> list[Segment]` — extracts Resemblyzer embeddings per segment, runs agglomerative clustering (cosine distance threshold 0.25), assigns `SPEAKER_XX` IDs
+- [x] 6.5 Integrate embedding cache: call `PipelineCache.get_embedding(audio_path, mtime)` before computing; call `set_embedding` after
+- [x] 6.6 Log active diarization mode at startup: `"Diarization mode: fast (Resemblyzer)"` or `"Diarization mode: standard (pyannote)"`
+- [x] 6.7 Write unit test: `--fast-mode` with a 3-speaker audio fixture produces 3 distinct `SPEAKER_XX` IDs
 
 ---
 

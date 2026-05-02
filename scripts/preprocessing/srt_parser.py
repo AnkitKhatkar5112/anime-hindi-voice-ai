@@ -161,12 +161,57 @@ class SRTParser:
         ----------
         segments:
             Ordered list of segments to serialise.  Each segment's
-            ``source_text``, ``start``, and ``end`` fields are used.
+            ``dubbed_text`` (falling back to ``source_text`` when empty),
+            ``start``, and ``end`` fields are used.
 
         Returns
         -------
         str
             A well-formed SRT document as a Unicode string, suitable for
-            writing directly to a ``.srt`` file.
+            writing directly to a ``.srt`` file with UTF-8 encoding.
         """
-        raise NotImplementedError
+        blocks: List[str] = []
+        for index, segment in enumerate(segments, start=1):
+            # Use dubbed_text if available, otherwise fall back to source_text
+            text = segment.dubbed_text if segment.dubbed_text else segment.source_text
+
+            start_tc = self._seconds_to_timecode(segment.start)
+            end_tc = self._seconds_to_timecode(segment.end)
+
+            block = f"{index}\n{start_tc} --> {end_tc}\n{text}"
+            blocks.append(block)
+
+        return "\n\n".join(blocks)
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _seconds_to_timecode(seconds: float) -> str:
+        """Convert a float seconds value to ``HH:MM:SS,mmm`` format.
+
+        Uses integer arithmetic to avoid floating-point drift, ensuring
+        round-trip precision within 1 ms.
+
+        Parameters
+        ----------
+        seconds:
+            Time in seconds (must be >= 0).
+
+        Returns
+        -------
+        str
+            Timecode string in ``HH:MM:SS,mmm`` format.
+        """
+        # Convert to whole milliseconds using integer arithmetic to avoid drift
+        total_ms = int(round(seconds * 1000))
+
+        ms = total_ms % 1000
+        total_s = total_ms // 1000
+        s = total_s % 60
+        total_m = total_s // 60
+        m = total_m % 60
+        h = total_m // 60
+
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
